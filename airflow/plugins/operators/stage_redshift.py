@@ -1,26 +1,43 @@
+from airflow.contrib.hooks.aws_hook import AwsHook
 from airflow.hooks.postgres_hook import PostgresHook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
 class StageToRedshiftOperator(BaseOperator):
+    """ Copying data from S3 to Redshift
+    """
     ui_color = '#358140'
 
     @apply_defaults
     def __init__(self,
-                 # Define your operators params (with defaults) here
-                 # Example:
-                 # redshift_conn_id=your-connection-name
+                 aws_credentials_id="",
+                 redshift_conn_id="",
+                 table="",
+                 s3_bucket="",
+                 s3_key="",
+                 region="",
+                 file_format="JSON",
+                 log_json_filepath="auto",
                  *args, **kwargs):
 
         super(StageToRedshiftOperator, self).__init__(*args, **kwargs)
-        # Map params here
-        # Example:
-        # self.conn_id = conn_id
-
+        self.aws_credentials_id = aws_credentials_id
+        self.redshift_conn_id = redshift_conn_id
+        self.table = table
+        self.s3_bucket = s3_bucket
+        self.s3_key = s3_key
+        self.file_format = file_format
+        self.log_json_filepath = log_json_filepath
+        self.region = region
+        
     def execute(self, context):
-        self.log.info('StageToRedshiftOperator not implemented yet')
-
-
-
-
-
+        """ Execute copying of data from S3 to Redshift
+        """
+        aws_hook = AwsHook(self.aws_credentials_id)
+        credentials = aws_hook.get_credentials()
+        redshift = PostgresHook(postgres_conn_id=self.redshift_conn_id)
+        s3_path = f"s3://{self.s3_bucket}/{self.s3_key}"
+        self.log.info(f"Copying data from S3 {s3_path} to Redshift table {self.table}")
+        cmd = f"COPY {self.table} FROM '{s3_path}' ACCESS_KEY_ID '{credentials.access_key}' SECRET_ACCESS_KEY" \
+        f" '{credentials.secret_key}' JSON '{self.log_json_filepath}' COMPUPDATE OFF"
+        redshift.run(cmd)
